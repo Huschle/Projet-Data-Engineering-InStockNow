@@ -12,14 +12,14 @@ object Main extends IOApp {
     val productThresholds: Map[String, Int] = Map(
     "ski" -> 3,
     "doudoune" -> 4,
-    "pull" -> 5,
-    "maillot de bain" -> 5,
+    "pull" -> 4,
+    "maillot de bain" -> 4,
     "t-shirt" -> 4,
     "crème solaire" -> 4,
     "parapluie" -> 3,
     "GTA6" -> 2,
-    "coca" -> 12,
-    "papier toilette" -> 10
+    "coca" -> 4,
+    "papier toilette" -> 4
     )
 
     val allProducts: List[String] = productThresholds.keys.toList
@@ -37,7 +37,7 @@ object Main extends IOApp {
     )
 
     def generateMessage(product: String, threshold: Int): StockMessage = {
-    val quantity = Random.between(0, 10)
+    val quantity = Random.between(0, 30)
 
     StockMessage(
         sensor_id = s"shelf-${Random.between(1, 5)}",

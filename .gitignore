@@ -10,7 +10,7 @@ project/project/
 .vscode/
 
 # Metals and bloop config
-project/metals.sbt
+*/project/metals.sbt
 
 # Mac system files
 .DS_Store
