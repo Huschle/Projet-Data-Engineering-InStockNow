@@ -1,0 +1,16 @@
+# SBT/Scala build output
+**/target/
+project/target/
+project/project/
+
+# IDE and build tool files
+.idea/
+.bloop/
+.metals/
+.vscode/
+
+# Metals and bloop config
+project/metals.sbt
+
+# Mac system files
+.DS_Store
