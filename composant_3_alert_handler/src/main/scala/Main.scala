@@ -1,7 +1,6 @@
-import cats.effect.{IO, IOApp, ExitCode, Resource}
+import cats.effect.{IO, IOApp, ExitCode}
 import fs2.kafka._
 import io.circe.generic.auto._
-import io.circe.syntax._
 import io.circe.parser._
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -19,19 +18,13 @@ object Main extends IOApp {
                                  alert: Boolean
                                )
 
-  final case class MissingProduct(
-                                   product_id: String,
-                                   missing_quantity: Int,
-                                   high_priority: Boolean
-                                 )
-
   val seasonalPriority: Map[String, Set[String]] = Map(
     "summer" -> Set("maillot de bain", "crème solaire"),
     "winter" -> Set("ski", "doudoune"),
     "spring" -> Set("t-shirt"),
     "autumn" -> Set("parapluie", "pull")
   )
-  
+
   def getSeasonFromTimestamp(ts: String): Option[String] = {
     try {
       val date = ZonedDateTime.parse(ts, DateTimeFormatter.ISO_ZONED_DATE_TIME)
@@ -50,53 +43,37 @@ object Main extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
     val consumerSettings =
       ConsumerSettings[IO, String, String]
-        .withBootstrapServers(sys.env.getOrElse("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"))
+        .withBootstrapServers("localhost:9092")
         .withGroupId("instocknow-alert-handler")
         .withAutoOffsetReset(AutoOffsetReset.Earliest)
 
-    val producerSettings =
-      ProducerSettings[IO, String, String]
-        .withBootstrapServers(sys.env.getOrElse("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"))
+    KafkaConsumer
+      .stream(consumerSettings)
+      .subscribeTo("instocknow-alerts")
+      .records
+      .evalMap { committable =>
+        val value = committable.record.value
+        decode[StockMessage](value) match {
+          case Right(msg) =>
+            val missingQty = 3 * msg.threshold - msg.quantity
 
-    val stream = KafkaProducer.resource(producerSettings).use { producer =>
-      KafkaConsumer
-        .stream(consumerSettings)
-        .subscribeTo("instocknow-alerts")
-        .records
-        .evalMap { committable =>
-          val value = committable.record.value
-          decode[StockMessage](value) match {
-            case Right(msg) =>
-              if (msg.quantity < msg.threshold) {
-                val missingQty = 3 * msg.threshold - msg.quantity
+            getSeasonFromTimestamp(msg.timestamp) match {
+              case Some(season) =>
+                val priorityProducts = seasonalPriority.getOrElse(season, Set.empty)
+                val isHighPriority = priorityProducts.contains(msg.product_id)
 
-                getSeasonFromTimestamp(msg.timestamp) match {
-                  case Some(season) =>
-                    val priorityProducts = seasonalPriority.getOrElse(season, Set.empty)
-                    val isHighPriority = priorityProducts.contains(msg.product_id)
+                IO(println(s"Missing product: '${msg.product_id}', missing quantity: $missingQty, high priority: $isHighPriority"))
 
-                    val missingProduct = MissingProduct(msg.product_id, missingQty, isHighPriority)
-                    val json = missingProduct.asJson.noSpaces
+              case None =>
+                IO(println(s"Invalid timestamp format in message: ${msg.timestamp}"))
+            }
 
-                    val record = ProducerRecord("instocknow-missing", msg.product_id, json)
-                    val produce = producer.produce(ProducerRecords.one(record)).void
-
-                    produce *> IO(println(s"Sent missing product alert: $missingProduct"))
-
-                  case None =>
-                    IO(println(s"Invalid timestamp format in message: ${msg.timestamp}"))
-                }
-              } else {
-                IO.unit
-              }
-            case Left(error) =>
-              IO(println(s"Failed to parse message: $error\nRaw: $value"))
-          }
+          case Left(error) =>
+            IO(println(s"Failed to parse message: $error\nRaw: $value"))
         }
-        .compile
-        .drain
-    }
-
-    stream.as(ExitCode.Success)
+      }
+      .compile
+      .drain
+      .as(ExitCode.Success)
   }
 }
