@@ -19,13 +19,13 @@ object Main extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
     val consumerSettings =
       ConsumerSettings[IO, String, String]
-        .withBootstrapServers("localhost:9092")
+        .withBootstrapServers(sys.env.getOrElse("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"))
         .withGroupId("instocknow-alert-filter")
         .withAutoOffsetReset(AutoOffsetReset.Earliest)
 
     val producerSettings =
       ProducerSettings[IO, String, String]
-        .withBootstrapServers("localhost:9092")
+        .withBootstrapServers(sys.env.getOrElse("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"))
 
     KafkaProducer.resource(producerSettings).use { producer => 
       KafkaConsumer

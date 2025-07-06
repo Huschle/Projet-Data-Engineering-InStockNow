@@ -1,13 +1,16 @@
-version: "2"
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
+    hostname: zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - iot-network
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
+    hostname: kafka
     ports:
       - "9092:9092"
     depends_on:
@@ -15,13 +18,17 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+    networks:
+      - iot-network
 
   namenode:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
     container_name: namenode
+    hostname: namenode
     volumes:
       - hadoop_namenode:/hadoop/dfs/name
     environment:
@@ -31,10 +38,13 @@ services:
     ports:
       - "9870:9870"
       - "9000:9000"
+    networks:
+      - iot-network
 
   datanode:
     image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
     container_name: datanode
+    hostname: datanode
     volumes:
       - hadoop_datanode:/hadoop/dfs/data
     environment:
@@ -45,6 +55,97 @@ services:
       - namenode
     ports:
       - "9864:9864"
+    networks:
+      - iot-network
+
+  # Component 1 - IoT Simulator
+  simulator:
+    build:
+      context: ./composant_1_simulateur
+      dockerfile: Dockerfile
+    container_name: iot-simulator
+    hostname: simulator
+    depends_on:
+      - kafka
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    networks:
+      - iot-network
+    restart: unless-stopped
+
+  # Component 2 - Alert Filter
+  alert-filter:
+    build:
+      context: ./composant_2_alert_filter
+      dockerfile: Dockerfile
+    container_name: alert-filter
+    hostname: alert-filter
+    depends_on:
+      - kafka
+      - simulator
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    networks:
+      - iot-network
+    restart: unless-stopped
+
+  # Component 3 - Alert Handler
+  alert-handler:
+    build:
+      context: ./composant_3_alert_handler
+      dockerfile: Dockerfile
+    container_name: alert-handler
+    hostname: alert-handler
+    depends_on:
+      - kafka
+      - alert-filter
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    networks:
+      - iot-network
+    restart: unless-stopped
+
+  # Component 4 - Storage
+  storage:
+    build:
+      context: ./composant_4_storage
+      dockerfile: Dockerfile
+    container_name: storage
+    hostname: storage
+    depends_on:
+      - kafka
+      - namenode
+      - datanode
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - HDFS_NAMENODE_URL=hdfs://namenode:9000
+    networks:
+      - iot-network
+    restart: unless-stopped
+
+  # Component 5 - Analysis (Spark)
+  analysis:
+    build:
+      context: ./composant_5_analysis
+      dockerfile: Dockerfile
+    container_name: analysis
+    hostname: analysis
+    depends_on:
+      - namenode
+      - datanode
+      - storage
+    environment:
+      - HDFS_NAMENODE_URL=hdfs://namenode:9000
+      - SPARK_MASTER_URL=local[*]
+    ports:
+      - "4040:4040"  # Spark UI
+    networks:
+      - iot-network
+    restart: "no"  # Run once for analysis
+
+networks:
+  iot-network:
+    driver: bridge
 
 volumes:
   hadoop_namenode:

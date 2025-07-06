@@ -56,7 +56,7 @@ object Main extends IOApp {
 
     val producerSettings =
       ProducerSettings[IO, String, String]
-        .withBootstrapServers("localhost:9092")
+        .withBootstrapServers(sys.env.getOrElse("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"))
 
     KafkaProducer.stream(producerSettings).flatMap { producer =>
 

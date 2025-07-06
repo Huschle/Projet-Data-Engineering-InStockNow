@@ -1,0 +1,16 @@
+.git
+.gitignore
+README.md
+docker-run.sh
+test_components.sh
+*.log
+*.tmp
+target/
+project/target/
+project/project/
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*.swo
+*~

@@ -23,7 +23,7 @@ object Main extends IOApp {
   )
 
   val hadoopConf = new Configuration()
-  hadoopConf.set("fs.defaultFS", "hdfs://localhost:9000")
+  hadoopConf.set("fs.defaultFS", sys.env.getOrElse("HDFS_NAMENODE_URL", "hdfs://localhost:9000"))
   
   def writeToHDFS(data: String, path: String): IO[Unit] = IO {
     val fs = FileSystem.get(hadoopConf)
@@ -67,7 +67,7 @@ object Main extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
     val consumerSettings =
       ConsumerSettings[IO, String, String]
-        .withBootstrapServers("localhost:9092")
+        .withBootstrapServers(sys.env.getOrElse("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"))
         .withGroupId("storage-consumer")
         .withAutoOffsetReset(AutoOffsetReset.Latest)
 
